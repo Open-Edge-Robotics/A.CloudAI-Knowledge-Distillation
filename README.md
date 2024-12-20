@@ -38,3 +38,14 @@ python tools/train.py configs/segformer/segformer_mit-b1_8xb1-160k_cityscapes-10
 ```
 python tools/train.py configs/dinov2_citys2acdc/rein_dinov2l_mask2former_1024x1024_bs4x2.py
 ```
+
+- run host manager in cloud
+```
+sh run_cloud_manager.sh
+sh run_model_trainer.sh
+```
+
+- run client in device
+```
+python tools/run_client.py
+```
