@@ -24,6 +24,10 @@ pip install -v -e .
 ```
 ---
 
+- DINOv2 Model Checkpoint Preparation
+page: https://github.com/facebookresearch/dinov2
+
+
 ### How to run
 - activate conda env
 ```
