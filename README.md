@@ -30,7 +30,11 @@ pip install -v -e .
 conda activate cloud
 ```
 
-- train the model (e.g., segformer-b1)
+- train the model (e.g., segformer-b1 (Device AI model))
 ```
 python tools/train.py configs/segformer/segformer_mit-b1_8xb1-160k_cityscapes-1024x1024.py
+```
+- train the model (e.g., DINOv2-Large-Rein (Cloud AI model))
+```
+python tools/train.py configs/dinov2_citys2acdc/rein_dinov2l_mask2former_1024x1024_bs4x2.py
 ```
