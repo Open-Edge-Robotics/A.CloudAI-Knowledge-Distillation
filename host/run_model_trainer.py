@@ -77,7 +77,7 @@ class ModelTrainer():
         data['inputs'] = x
         outputs = self.device_model.test_step(data)
         outputs = torch.stack([outputs[i].seg_logits.data for i in range(len(x))])
-        
+
         loss = F.cross_entropy(resize(outputs, self.resize_shape_cloud, mode='bilinear'), foutputs_)
         loss = loss.mean()
         loss.backward()
@@ -144,9 +144,6 @@ def parse_args():
     parser.add_argument('--checkpoint_t', help='checkpoint file')
     parser.add_argument('--backbone', help='checkpoint file')
     parser.add_argument('--cloud_model_shape', type=int, help='size of input for cloud model')
-    parser.add_argument('--enable_ema', action='store_true', default=False, help='using ema for device model')
-    parser.add_argument('--enable_conf', action='store_true', default=False, help='using confidence for device model')
-    parser.add_argument('--enable_flip', action='store_true', default=False, help='using flip for cloud model')
 
     args = parser.parse_args()
     return args
@@ -201,10 +198,7 @@ def main():
         source_buffer=testloader_clear,
         image_folder_path='./host/images',
         checkpoint_folder_path='./host/checkpoints',
-        resize_shape_cloud = cloud_model_input_shape,
-        use_flip= args.enable_flip,
-        use_ema = args.enable_ema,
-        use_conf = args.enable_conf
+        resize_shape_cloud = cloud_model_input_shape
     )
     trainer.run()
 
