@@ -26,7 +26,6 @@ from PIL import Image
 def cross_entropy(x, y):# -> torch.Tensor:
     return -(y.softmax(1) * x.log_softmax(1)).sum(1)
 
-
 class ModelTrainer():
     def __init__(self, cloud_model, device_model, source_buffer, image_folder_path, checkpoint_folder_path, resize_shape_cloud=(512, 1024), use_flip = False, use_ema = False, use_conf = False):
         self.cloud_model = cloud_model
@@ -77,6 +76,52 @@ class ModelTrainer():
             else:
                 time.sleep(1)
 
+    def _run_distillation(self):
+        x, f_x = self._load_images()
+        x = x.cuda()
+
+        self.optimizer.zero_grad()
+        foutputs_ = []
+        with torch.no_grad():
+            data = dict()
+            data['inputs'] = resize(x.float(), self.resize_shape_cloud, mode = 'bilinear').int()
+            outputs =  self.cloud_model.test_step(data)
+            foutputs_ = torch.stack([outputs[i].seg_logits.data.max(0).indices for i in range(len(x))])
+
+            if self.use_flip:
+                data = dict()
+                data['inputs'] = resize(f_x.float(), self.resize_shape_cloud, mode = 'bilinear').int()
+                outputs =  self.cloud_model.test_step(data)
+                foutputs_flip = torch.stack([torch.flip(outputs[i].seg_logits.data.max(0).indices, dims=[-1]) for i in range(len(x))])
+                mask = (foutputs_ == foutputs_flip)
+                # print(mask, mask[0].sum())
+
+        data = dict()
+        data['inputs'] = x
+        outputs = self.device_model.test_step(data)
+        outputs = torch.stack([outputs[i].seg_logits.data for i in range(len(x))])
+        # print(foutputs_.shape, outputs.shape)
+
+        
+        loss = F.cross_entropy(resize(outputs, self.resize_shape_cloud, mode='bilinear'), foutputs_)
+        if self.use_flip:
+            loss = mask * loss
+            print(loss.shape, mask.shape)
+        loss = loss.mean()
+        loss.backward()
+        self.optimizer.step()
+
+        if self.use_ema:
+            self.ema_model = update_ema_variables(ema_model = self.ema_model, model = self.device_model, alpha_teacher=0.9)
+
+            if self.use_conf:
+                # confidence = outputs.max(dim=1).values.mean()
+                conf= outputs.softmax(dim=1).max(dim=1).values.mean()
+                scaled_conf = torch.clip(((conf-0.8) * 5.), min=0.0, max=1.0)
+                print(conf, scaled_conf)
+
+                self.ema_model = update_ema_variables(ema_model = self.ema_model, model = self.device_model, alpha_teacher=conf)
+
     def _check_image_folder(self):
         imgs = os.listdir(self.image_folder)
         # print(len(imgs))
@@ -108,6 +153,26 @@ class ModelTrainer():
         
         return images, flip_images
 
+        
+    def _save_checkpoint(self):
+        def get_params():
+            if self.use_ema:
+                dict = self.ema_model.state_dict()
+            else:
+                dict = self.device_model.state_dict()
+
+            state_dict = {}
+            state_dict = {'params': dict}
+            
+            return state_dict
+        
+        state_dict = get_params()
+        ckpt_temp_path = os.path.join(self.checkpoint_folder, 'tmp.pth')
+        ckpt_save_path = os.path.join(self.checkpoint_folder, self.current_ckpt)
+        if os.path.exists(ckpt_save_path):
+            os.remove(ckpt_save_path)
+        torch.save(state_dict, ckpt_temp_path)
+        os.rename(ckpt_temp_path, ckpt_save_path)
 
 def parse_args():
     parser = argparse.ArgumentParser(
