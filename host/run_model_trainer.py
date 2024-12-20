@@ -26,6 +26,23 @@ from PIL import Image
 def cross_entropy(x, y):# -> torch.Tensor:
     return -(y.softmax(1) * x.log_softmax(1)).sum(1)
 
+def update_ema_variables(ema_model, model, alpha_teacher=0.999, iteration=None):
+    # Use the "true" average until the exponential average is more correct
+    if iteration:
+        alpha_teacher = min(1 - 1 / (iteration + 1), alpha_teacher)
+
+    if True:
+        for ema_param, param in zip(ema_model.parameters(), model.parameters()):
+            #ema_param.data.mul_(alpha).add_(1 - alpha, param.data)
+            ema_param.data[:] = alpha_teacher * ema_param[:].data[:] + (1 - alpha_teacher) * param[:].data[:]
+    return ema_model
+
+def weight_decay(target_model, updated_model):
+    loss = 0
+    for target_param, param in zip(target_model.parameters(), updated_model.parameters()):
+        loss = loss + F.mse_loss(target_param[:].data[:], param[:].data[:])
+    return loss
+
 class ModelTrainer():
     def __init__(self, cloud_model, device_model, source_buffer, image_folder_path, checkpoint_folder_path, resize_shape_cloud=(512, 1024), use_flip = False, use_ema = False, use_conf = False):
         self.cloud_model = cloud_model
