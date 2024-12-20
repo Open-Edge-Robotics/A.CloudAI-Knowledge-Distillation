@@ -23,3 +23,14 @@ mim install "mmcv>=2.0.0"
 pip install -v -e .
 ```
 ---
+
+### How to run
+- activate conda env
+```
+conda activate cloud
+```
+
+- train the model (e.g., segformer-b1)
+```
+python tools/train.py configs/segformer/segformer_mit-b1_8xb1-160k_cityscapes-1024x1024.py
+```
