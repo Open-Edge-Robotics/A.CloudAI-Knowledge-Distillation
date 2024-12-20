@@ -26,25 +26,8 @@ from PIL import Image
 def cross_entropy(x, y):# -> torch.Tensor:
     return -(y.softmax(1) * x.log_softmax(1)).sum(1)
 
-def update_ema_variables(ema_model, model, alpha_teacher=0.999, iteration=None):
-    # Use the "true" average until the exponential average is more correct
-    if iteration:
-        alpha_teacher = min(1 - 1 / (iteration + 1), alpha_teacher)
-
-    if True:
-        for ema_param, param in zip(ema_model.parameters(), model.parameters()):
-            #ema_param.data.mul_(alpha).add_(1 - alpha, param.data)
-            ema_param.data[:] = alpha_teacher * ema_param[:].data[:] + (1 - alpha_teacher) * param[:].data[:]
-    return ema_model
-
-def weight_decay(target_model, updated_model):
-    loss = 0
-    for target_param, param in zip(target_model.parameters(), updated_model.parameters()):
-        loss = loss + F.mse_loss(target_param[:].data[:], param[:].data[:])
-    return loss
-
 class ModelTrainer():
-    def __init__(self, cloud_model, device_model, source_buffer, image_folder_path, checkpoint_folder_path, resize_shape_cloud=(512, 1024), use_flip = False, use_ema = False, use_conf = False):
+    def __init__(self, cloud_model, device_model, source_buffer, image_folder_path, checkpoint_folder_path, resize_shape_cloud=(512, 1024)):
         self.cloud_model = cloud_model
         self.device_model = device_model
         self.source_buffer = source_buffer
@@ -55,19 +38,10 @@ class ModelTrainer():
 
         self.resize_shape_device = (512, 1024)
         self.resize_shape_cloud = resize_shape_cloud
-        self.use_ema = use_ema
-        self.use_flip = use_flip
-        # build a inter-process communication with zmq
-        # context =zmq.Context()
-        # self.socket = context.socket(zmq.REQ)
-        # self.socket.connect("tcp://localhost:5555")   
         self.batch_size = 8
         
-        # mean = [0.485, 0.456, 0.406]
-        # std = [0.229, 0.224, 0.225]
         self.transform = T.Compose([
             T.ToTensor(),
-            # T.Normalize(mean, std)
             ])
 
         params = []
@@ -78,13 +52,7 @@ class ModelTrainer():
                 names.append(name)
         print(names)
         self.optimizer = torch.optim.Adam(params, lr=0.00006, betas=(0.9, 0.999))
-        # self.optimizer = torch.optim.SGD(params, lr=0.00001)
-        self.use_conf = use_conf
-        if use_ema:
-            self.ema_model = copy.deepcopy(device_model)
-        self.source_model = copy.deepcopy(device_model)
             
-
     def run(self):
         while True:
             if self._check_image_folder():
@@ -105,39 +73,15 @@ class ModelTrainer():
             outputs =  self.cloud_model.test_step(data)
             foutputs_ = torch.stack([outputs[i].seg_logits.data.max(0).indices for i in range(len(x))])
 
-            if self.use_flip:
-                data = dict()
-                data['inputs'] = resize(f_x.float(), self.resize_shape_cloud, mode = 'bilinear').int()
-                outputs =  self.cloud_model.test_step(data)
-                foutputs_flip = torch.stack([torch.flip(outputs[i].seg_logits.data.max(0).indices, dims=[-1]) for i in range(len(x))])
-                mask = (foutputs_ == foutputs_flip)
-                # print(mask, mask[0].sum())
-
         data = dict()
         data['inputs'] = x
         outputs = self.device_model.test_step(data)
         outputs = torch.stack([outputs[i].seg_logits.data for i in range(len(x))])
-        # print(foutputs_.shape, outputs.shape)
-
         
         loss = F.cross_entropy(resize(outputs, self.resize_shape_cloud, mode='bilinear'), foutputs_)
-        if self.use_flip:
-            loss = mask * loss
-            print(loss.shape, mask.shape)
         loss = loss.mean()
         loss.backward()
         self.optimizer.step()
-
-        if self.use_ema:
-            self.ema_model = update_ema_variables(ema_model = self.ema_model, model = self.device_model, alpha_teacher=0.9)
-
-            if self.use_conf:
-                # confidence = outputs.max(dim=1).values.mean()
-                conf= outputs.softmax(dim=1).max(dim=1).values.mean()
-                scaled_conf = torch.clip(((conf-0.8) * 5.), min=0.0, max=1.0)
-                print(conf, scaled_conf)
-
-                self.ema_model = update_ema_variables(ema_model = self.ema_model, model = self.device_model, alpha_teacher=conf)
 
     def _check_image_folder(self):
         imgs = os.listdir(self.image_folder)
