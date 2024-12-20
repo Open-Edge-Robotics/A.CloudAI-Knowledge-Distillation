@@ -14,7 +14,7 @@ conda env create -f env.yaml
 conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
 ```
 
-- install mmsegmentation ([reference](https://github.com/open-mmlab/mmsegmentation/blob/main/docs/en/get_started.md#installation))
+- install mmsegmentation by following https://github.com/open-mmlab/mmsegmentation
 ```
 pip install -U openmim
 mim install mmengine
