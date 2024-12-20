@@ -27,6 +27,8 @@ pip install -v -e .
 - DINOv2 Model Checkpoint Preparation
 page: https://github.com/facebookresearch/dinov2
 
+- InternImage-L Model Checkpoint Preparation
+page: https://github.com/OpenGVLab/InternImage
 
 ### How to run
 - activate conda env
