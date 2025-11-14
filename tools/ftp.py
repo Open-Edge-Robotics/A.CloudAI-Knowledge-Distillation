@@ -22,12 +22,11 @@ class MyHandler(FTPHandler):
         self.device_manager.dl_is_finished = True
         self.device_manager.is_in_progress = False
 
-
     def on_disconnect(self):
         pass
 
 class DeviceManager():
-    def __init__(self, ul_host, ul_port, dl_host, dl_port, username = 'coa', password = 'sdfsdf'):
+    def __init__(self, ul_host, ul_port, dl_host, dl_port, bpsspeed=0, username = 'coa', password = 'sdfsdf'):
         self.host = ul_host
         self.port = ul_port
         self.myip = dl_host
@@ -53,8 +52,8 @@ class DeviceManager():
 
         # Create FTP handler with the custom handler class
         dtp_handler = ThrottledDTPHandler
-        dtp_handler.read_limit = 1024000 * 0 #1024000  # 1Mb / sec = 1,000 Kb/sec (1000 * 1024)
-        dtp_handler.write_limit = 1024000 * 0 #1024000  # 1,000 Kb/sec (1000 * 1024)
+        dtp_handler.read_limit = 1024000 * bpsspeed #1024000  # 1Mb / sec = 1,000 Kb/sec (1000 * 1024)
+        dtp_handler.write_limit = 1024000 * bpsspeed #1024000  # 1,000 Kb/sec (1000 * 1024)
 
         handler = MyHandler
         handler.authorizer = authorizer
@@ -88,16 +87,20 @@ class DeviceManager():
     def update(self, model):
         # Update the model with downlinked model gradients.
         # model = model + downlinked gradients
-        self.model_update_base(model)
+        is_updated = self.model_update_base(model)
         self.dl_is_finished = False
         self.downlink_time = time.time() - self.dl_state_dict['time']
-
-        return model
+        return is_updated, model
     
     def model_update_base(self, model):
         # self.device_manager.dl_state_dict
-        delta_params = self.dl_state_dict['params']
-        model.load_state_dict(delta_params, strict=False)
+        # print(self.dl_state_dict['valid'])
+        if self.dl_state_dict['valid']:
+            delta_params = self.dl_state_dict['params']
+            model.load_state_dict(delta_params, strict=True)
+            return 1
+        else:
+            return 0
 
     def _send_image_array(self, image_array):
         image_dict = dict()
