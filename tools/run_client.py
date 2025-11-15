@@ -6,6 +6,7 @@ import torch
 import time
 import threading
 import ftp
+import cv2
 
 from collections import deque
 
@@ -68,15 +69,53 @@ def parse_args():
 
     return args
 
+import numpy as np
+from matplotlib.colors import ListedColormap
+from PIL import Image
+def visualize_segmentation(image, mask, name, class_colors=None):
+    """
+    Visualize the original image and its segmentation mask side by side.
+    
+    Args:
+        image (np.ndarray): Original RGB image of shape (H, W, 3).
+        mask (np.ndarray): Segmentation mask of shape (H, W), 
+                           where each pixel is a class ID.
+        class_colors (list or np.ndarray, optional): A list of RGB triplets 
+                                                     for each class ID. 
+                                                     If None, random colors are used.
+    """
+    # Check shapes
+    assert len(image.shape) == 3 and image.shape[2] == 3, "image should be (H, W, 3)"
+    assert len(mask.shape) == 2, "mask should be (H, W)"
+    assert image.shape[:2] == mask.shape, "image and mask must have the same spatial dimensions"
+    
+    # If no custom class colors are provided, create a random colormap
+    cmap = ListedColormap(np.array(class_colors) / 255.0)
+    
+    # Create a figure with two subplots
+    # fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    
+    # Left: Original image
+    img = Image.fromarray(image.astype(np.uint8))
+    img.save(f'{name}_img.png')
+    
+    # Right: Segmentation mask
+    # We use 'imshow' with a discrete colormap representing the class IDs
+    color_mask = np.zeros_like(image)
+    for class_id, color in enumerate(class_colors):
+        # color should be [R, G, B]
+        color_mask[mask == class_id] = color
+    img = Image.fromarray(color_mask.astype(np.uint8))
+    img.save(f'{name}_mask.png')
+
 def main():
     # Network setup
     device_manager = ftp.DeviceManager(
-        ul_host = '192.168.0.1', ul_port = 9999,
-        dl_host = '192.168.0.1', dl_port = 9998,
+        ul_host = '172.27.183.243', ul_port = 9999,
+        dl_host = '172.27.183.242', dl_port = 9998,
+        bpsspeed = 0
         )
-
     args = parse_args()
-
     # load config
     cfg = Config.fromfile(args.config)
     cfg.launcher = args.launcher
@@ -162,8 +201,25 @@ def main():
 
                             }
         condition_order = ['fog', 'night', 'rain', 'snow'] * 10
-        resize_shape = (480, 960)
-    
+        resize_shape = (512, 1024)
+
+    elif 'shift' in args.config:
+        # video = [x for x in os.listdir('./data/shift/video') if not x.endswith('.py')]
+        video = ['d11b-8666', '6c4c-ec9b', '1ee5-e8db', 'a30f-b210', '3c95-8ad5', 'f316-dc0b', '2ecd-cce4', '3b8a-b336', '7233-b8c2', 'e5f3-bbdc', 'a9cb-54e3', 'af55-3500', '1654-0260', '520d-0b70', 'b414-5936', '7900-e2cd', '7048-15e1', '8def-85dc', '98d1-af8d', '4a0d-4564', '146a-d226', '337e-11d0', '7fbc-c771', '364b-0733', '4f6e-e7e1', 'deb7-6032']
+
+        test_loader = Runner.build_dataloader(cfg['test_dataloader'])
+        condition_loader = {}
+        condition_order = []
+
+        test = 25
+        for v in video[test:test+1]:
+            test_loader = Runner.build_dataloader(cfg[f'test_dataloader_{v[:4]}'])
+            condition_loader[v] = test_loader
+            condition_order.append(v)
+        resize_shape = (512, 1024)    
+    print(condition_order)
+
+
     evaluator = IoUMetric()
     evaluator.dataset_meta = model.dataset_meta
 
@@ -181,14 +237,13 @@ def main():
         start = time.time()
         n_update = 0
 
-        for data in condition_loader[condition]:
+        for k, data in enumerate(condition_loader[condition]):
             # Save the image in array for future uplink.
             if len(image_array) < device_manager.image_send_limit:
                 image_array.append(resize(data['inputs'][0].unsqueeze(0), resize_shape).cpu())
             else:
                 image_array.popleft()
                 image_array.append(resize(data['inputs'][0].unsqueeze(0), resize_shape).cpu())
-            # data = model.data_preprocessor(data)
 
             # Check the adaptation is in progress.
             if device_manager.is_in_progress:
@@ -196,8 +251,8 @@ def main():
                 # print(device_manager.is_in_progress, device_manager.dl_is_finished)
                 if device_manager.dl_is_finished:
                     # Update the model params.
-                    model = device_manager.update(model)
-                    n_update += 1
+                    updated, model = device_manager.update(model)
+                    n_update += updated
                     downlink_times.append(device_manager.downlink_time)
                     # print('model is updated')
                 else:                    
@@ -210,15 +265,19 @@ def main():
                 device_manager.uplink(image_array)
                 image_array = deque([])
 
+
             with torch.no_grad():
+                # outputs = outputs[0].seg_logits.data.unsqueeze(0) # For Rein 
                 data_ = model.data_preprocessor(data)
                 outputs = model.predict(resize(data_['inputs'], resize_shape, mode='bilinear'))
-                results = model.postprocess_result(outputs[0].seg_logits.data.unsqueeze(0), data_['data_samples'])
+                results = model.postprocess_result(outputs[0].seg_logits.data.unsqueeze(0), data['data_samples'])
                 _data_samples = []
                 for data_sample in results:
                         _data_samples.append(data_sample.to_dict())
                 
                 evaluator.process(data_samples=_data_samples, data_batch=data)
+
+
         total_n_update += n_update
         result = evaluator.evaluate(len(condition_loader[condition].dataset))
         print(result)
@@ -234,18 +293,18 @@ def main():
             n_round += 1
         f.write('{}, '.format(result['mIoU']))
 
-        for data in condition_loader[condition+'_val']:
-            with torch.no_grad():
-                data_ = model.data_preprocessor(data)
-                outputs = model.predict(resize(data_['inputs'], resize_shape, mode='bilinear'))
-                results = model.postprocess_result(outputs[0].seg_logits.data.unsqueeze(0), data_['data_samples'])
-            _data_samples = []
-            for data_sample in results:
-                _data_samples.append(data_sample.to_dict())
-            evaluator.process(data_samples=_data_samples, data_batch=data)
-        result = evaluator.evaluate(len(condition_loader[condition+'_val'].dataset))
-        print(result)
-        fv.write('{}, '.format(result['mIoU']))
+        # for data in condition_loader[condition+'_val']:
+        #     with torch.no_grad():
+        #         data_ = model.data_preprocessor(data)
+        #         outputs = model.predict(resize(data_['inputs'], resize_shape, mode='bilinear'))
+        #         results = model.postprocess_result(outputs[0].seg_logits.data.unsqueeze(0), data_['data_samples'])
+        #     _data_samples = []
+        #     for data_sample in results:
+        #         _data_samples.append(data_sample.to_dict())
+        #     evaluator.process(data_samples=_data_samples, data_batch=data)
+        # result = evaluator.evaluate(len(condition_loader[condition+'_val'].dataset))
+        # print(result)
+        # fv.write('{}, '.format(result['mIoU']))
 
     print('Mean number of update: {}'.format(total_n_update/len(condition_order)))
     print('Total average downlink times: {}'.format(total_downlink_times/len(condition_order)))
