@@ -164,7 +164,6 @@ def main():
                             '200': testloader_200,
                             }
         condition_order = ['clear', '25', '50', '75', '100', '200', '100', '75', '50', '25', 'clear']
-        resize_shape = (512, 1024)
 
     elif 'acdc' in args.config:
         cfg.test_dataloader_fog.dataset.pipeline = cfg.cotta_pipeline
@@ -177,25 +176,14 @@ def main():
         testloader_rain = Runner.build_dataloader(cfg['test_dataloader_rain'])
         testloader_snow = Runner.build_dataloader(cfg['test_dataloader_snow'])
 
-        valloader_fog = Runner.build_dataloader(cfg['val_dataloader_fog'])
-        valloader_night = Runner.build_dataloader(cfg['val_dataloader_night'])
-        valloader_rain = Runner.build_dataloader(cfg['val_dataloader_rain'])
-        valloader_snow = Runner.build_dataloader(cfg['val_dataloader_snow'])
-
         condition_loader = {
                             'fog': testloader_fog,
                             'night': testloader_night,
                             'rain': testloader_rain,
-                            'snow': testloader_snow,
-
-                            'fog_val': valloader_fog,
-                            'night_val': valloader_night,
-                            'rain_val': valloader_rain,
-                            'snow_val': valloader_snow
-
+                            'snow': testloader_snow
                             }
         condition_order = ['fog', 'night', 'rain', 'snow'] * 10
-        resize_shape = (480, 960)
+        #Optimizer setting (Norm parameters are selected for updating)
 
     params = []
     names = []
@@ -219,14 +207,13 @@ def main():
     evaluator = IoUMetric()
     evaluator.dataset_meta = model.dataset_meta
 
-    resize_shape = (480, 960)
+    resize_shape = (512, 1024)
     image_array = deque([])
     n_round = 1
     total_n_update = 0
     total_downlink_times = 0
 
     f = open('results/{}.txt'.format(args.save_path), 'w')
-    fv= open('results/{}_val.txt'.format(args.save_path), 'w')
     for condition in condition_order:
         downlink_times = []
 
@@ -298,23 +285,9 @@ def main():
         if 'acdc' in args.config and condition == 'snow':
             n_round += 1
         f.write('{}, '.format(result['mIoU']))
-
-        for data in condition_loader[condition+'_val']:
-            with torch.no_grad():
-                data_ = model.data_preprocessor(data)
-                outputs = model.predict(resize(data_['inputs'], resize_shape, mode='bilinear'))
-                results = model.postprocess_result(outputs[0].seg_logits.data.unsqueeze(0), data_['data_samples'])
-            _data_samples = []
-            for data_sample in results:
-                _data_samples.append(data_sample.to_dict())
-            evaluator.process(data_samples=_data_samples, data_batch=data)
-        result = evaluator.evaluate(len(condition_loader[condition+'_val'].dataset))
-        print(result)
-        fv.write('{}, '.format(result['mIoU']))
     print('Mean number of update: {}'.format(total_n_update/len(condition_order)))
     print('Total average downlink times: {}'.format(total_downlink_times/len(condition_order)))
     f.close()
-    fv.close()
 
 if __name__ == '__main__':
     main()
