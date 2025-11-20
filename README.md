@@ -1,6 +1,4 @@
-# A.CloudAI-Knowledge-Distillation
----
-Knowledge distillation from Cloud/Edge AI model to Device AI model.
+# Foundation Model-based Cloud-Device Collaborative Online Adaptation with Effective Linking
 
 ---
 ### Environment setting
@@ -9,12 +7,12 @@ Knowledge distillation from Cloud/Edge AI model to Device AI model.
 conda env create -f env.yaml
 ```
 
-- install pytorch (e.g., we use pytorch version of 2.3.1)
+- install pytorch (e.g., we use pytorch version of 2.3.1
 ``` 
 conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
 ```
 
-- install mmsegmentation by following https://github.com/open-mmlab/mmsegmentation
+- install mmsegmentation ([reference](https://github.com/open-mmlab/mmsegmentation/blob/main/docs/en/get_started.md#installation))
 ```
 pip install -U openmim
 mim install mmengine
@@ -24,36 +22,19 @@ pip install -v -e .
 ```
 ---
 
-- DINOv2 Model Checkpoint Preparation
-page: https://github.com/facebookresearch/dinov2
 
-- InternImage-L Model Checkpoint Preparation
-page: https://github.com/OpenGVLab/InternImage
-
-### How to run
-- activate conda env
+### Run
 ```
-conda activate cloud
-```
-
-- train the model (e.g., segformer-b1 (Device AI model))
-```
-python tools/train.py configs/segformer/segformer_mit-b1_8xb1-160k_cityscapes-1024x1024.py
-```
-- train the model (e.g., DINOv2-Large-Rein (Cloud AI model))
-```
-python tools/train.py configs/dinov2_citys2acdc/rein_dinov2l_mask2former_1024x1024_bs4x2.py
-```
-
-- run host manager in cloud
-```
+# Cloud Computer Terminal 1
 sh run_cloud_manager.sh
+
+# Cloud Computer Terminal 2
 sh run_model_trainer.sh
 ```
-
-- run client in device
+---
 ```
-python tools/run_client.py
+# Device Computer Terminal 1
+sh run_client_segb1_project.sh # For baseline
+
+sh run_client_segb1_adapt_project.sh # For adaptformer
 ```
-
-
