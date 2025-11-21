@@ -24,16 +24,20 @@ pip install -v -e .
 
 
 ### Run
-Cloud Computer = demo-raeyo@172.27.183.243
+Cloud Computer = demo-raeyo@172.27.183.243://home/demo-raeyo/Workspace/cloud-edge-collaborative-adaptation
 ```
 # Cloud Computer Terminal 1
-sh run_cloud_manager.sh
+python host/run_cloud_manager_baseline.py # For baseline
+---
+python host/run_cloud_manager_adaptformer.py # For adaptformer
 
 # Cloud Computer Terminal 2
-sh run_model_trainer.sh
+sh run_model_trainer.sh # For baseline
+---
+sh run_model_trainer_adaptformer.sh # For adaptformer
 ```
 ---
-Device computer = device@172.27.183.242
+Device computer = device@172.27.183.242:/home/device/workspace/cloud-edge-collborative-adaptation
 ```
 # Device Computer Terminal 1
 sh run_client_segb1_project.sh # For baseline
