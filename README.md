@@ -24,6 +24,7 @@ pip install -v -e .
 
 
 ### Run
+Cloud Computer = demo-raeyo@172.27.183.243
 ```
 # Cloud Computer Terminal 1
 sh run_cloud_manager.sh
@@ -32,6 +33,7 @@ sh run_cloud_manager.sh
 sh run_model_trainer.sh
 ```
 ---
+Device computer = device@172.27.183.242
 ```
 # Device Computer Terminal 1
 sh run_client_segb1_project.sh # For baseline
